@@ -20,13 +20,21 @@
 
 ### 手套与元件安装
 
-<img src="/home/liuhx/Documents/data_glove/DataGlove/doc/安装.png" style="zoom: 25%;" />
+大致构想
+
+<img src="安装.png" style="zoom: 25%;" />
 
 ### 上位机
 
 通过WiFi在局域网内与硬件连接（当然也可以做一个蓝牙的版本），读取的数据存储And/Or实时显示（by MANO）。
 
 ## 硬件各模块说明
+
+TODO [设计参考datasheet和library等资料]()
+
+外协制作了5片`Glove_FPC_I2C`，2*2片`SensorMux`；
+
+`SensorMux_Adapter_Conn`, `SensorMux_Adapter_Load`和`SensorMuxTca`需要手焊。
 
 ### 传感器板
 
@@ -129,7 +137,11 @@ BNO080全速读取时耗电typ 20mA[^1]，此外I2C上拉电阻会增大功耗�
 
 ### 直连转接板
 
-是传感器读取板的替代，使用TCA9548来选择I2C频道。板外形与传感器读取板类似。由于是串行读取数据，预计速度不会
+`SensorMuxTca`
+
+是传感器读取板的替代，使用TCA9548来选择I2C频道。板外形与传感器读取板类似。由于是串行读取数据，预计速度不会超过预订设计。
+
+TODO 给这个版本写个代码。
 
 ### 项目链接
 
@@ -139,17 +151,20 @@ BNO080全速读取时耗电typ 20mA[^1]，此外I2C上拉电阻会增大功耗�
 
 ### 数据接收
 
-`DGRecv.py`
+`DGRecv.py` 
 
 Note:
 
-* 使用TCP协议，‘使命必达’，所以可能后帧的时间早于前帧，查看timestamp文本文件重新排序。
+* Python2.7
+* 请根据MANO中的[readme](Codes\receiver\mano_v1_2\webuser\README.txt)安装Mesh库以可视化。
 
-note that TCP may results in Latter Data First Received, please use timestamp txt file to check the true order.
+* 修改ESP32程序中IP地址`server_addr`与上位机地址匹配。如默认的10000端口被占用，请自行修改匹配通信。
+
+* 使用TCP协议，‘使命必达’，所以可能后帧的时间早于前帧，查看timestamp文本文件重新排序。
 
 ### 可视化 - MANO
 
-[MANO](https://mano.is.tue.mpg.de/)
+[MANO项目地址](https://mano.is.tue.mpg.de/)
 
 #### Intro
 
@@ -158,6 +173,8 @@ note that TCP may results in Latter Data First Received, please use timestamp tx
 SMPL/MANO的主要概念是：
 
 1. 蒙皮骨骼动画
+
+   ![Blender中骨骼绑定示意](skeleton.png)
 
    1. Mesh是包在骨骼上的皮，骨骼移动带动Mesh变化。
    2. 骨骼由层级Joints描述，Poses正向运动学计算Joints的位置。和机器人结构比较类似。
@@ -169,9 +186,11 @@ SMPL/MANO的主要概念是：
 
 4. 姿态对Joints的位置有一些影响。
 
-5. $B_P, B_S$以及一些其他参数都是采数据学出来的。可以直接用项目提供的数据做姿态的可视化。
+5. $B_P, B_S$​以及一些其他参数都是采数据学出来的。可以直接用项目提供的数据做姿态的可视化。
 
-[^2]:https://www.aliyundrive.com/s/bLLFPWv28R2
+6. 总的来说对蒙皮骨骼动画有个概念，使用MANO项目提供的库导入模型，赋值shape和pose就可以得到mesh。
+
+[^2]:云盘中为下载的一部分数据。https://www.aliyundrive.com/s/bLLFPWv28R2
 
 #### MANO Pose
 

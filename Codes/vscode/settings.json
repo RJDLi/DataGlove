@@ -1,9 +1,0 @@
-{
-    "files.associations": {
-        "ostream": "cpp",
-        "functional": "cpp",
-        "iterator": "cpp",
-        "type_traits": "cpp",
-        "istream": "cpp"
-    }
-}
