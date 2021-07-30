@@ -62,11 +62,11 @@ TODO [设计参考datasheet和library等资料]()
 
 使用了4块ATMEGA328PB（Note：是328P==B==，不是常见的328P）以并行读取。328PB有2个I2C控制器。
 
-#### 程序
+#### 程序`reader`
 
 为了提高读取的速度，对Sparkfun BNO08x的库进行修改，切掉了读取函数的I^2^C等待。详见代码。
 
-与主控的通信使用SPI，详细的协议在代码中有注释。
+与主控的通信使用SPI，详细的协议在代码中有注释。！！！尚未测试该通信！！！
 
 整体使用ProtoThread库实现伪多线程。
 
@@ -92,13 +92,18 @@ TODO [设计参考datasheet和library等资料]()
 
 目前使用的是esp32 pico mini2开发板。其上的模块芯片是目前最小的板载天线的Esp32模块，性能也是最好之列。
 
-#### 程序
+默认管脚功能分配如下。ESP32支持管脚功能映射，使用Aruidno IDE编写程序时，可以在`PATH_TO_ARDUINO/packages/esp32/hardware/esp32/1.0.6/variants/pico32/pins_arduino.h`中修改管脚定义。
+
+![esp32-pico-devkitm-2-pinout](esp32-pico-devkitm-2-pinout.png)
+
+#### 程序`esp32`
 
 esp32实际上也是单核的（双核的另一核用作无线通信）。目前就是很简单的程序，一个循环query 328PB收集数据，一个循环发送。
 
 Note:
 
 * 使用`WiFiClient.send(buffer, size);`(2ms)而不是for循环发`WiFiClient.send(oneByte);`(60ms)。（这个时间是Core0的占用时间，实际发送耗时未测试。）
+* pico使用SPI库产生了奇怪的错误，暂时使用Node32S代替编写程序。
 
 ##### IMU 编号和位置
 
@@ -149,7 +154,7 @@ TODO 给这个版本写个代码。
 
 ## 软件
 
-### 数据接收
+### 数据接收`receiver`
 
 `DGRecv.py` 
 

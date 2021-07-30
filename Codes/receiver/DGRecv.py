@@ -3,7 +3,12 @@
 @Author:    Jiangfan Li
 @Email:     rdemezerl@gmail.com
 @Description: DataGlove Socket Receiever
-    @
+    @ verbose: print data receieved
+    @ show:	show mesh using MANO
+@Note:
+	Please change addr in esp32 codes.
+@TODO:
+    Receieve data from 2 gloves
 """
 import socket
 import numpy as np
@@ -13,7 +18,7 @@ import struct
 FRAME_LENGTH = 132 # 16*4*2 + 4
 
 class DGRecv:
-    def __init__(self, port=9000, verbal=False, show = False):
+    def __init__(self, port=9000, verbose=False, show = False):
         self.port = port
         self.s = socket.socket()
         self.t = threading.Thread(target=self.run, name="listen")
@@ -24,7 +29,7 @@ class DGRecv:
         self.times = []
         # save data periodically? ~90MB/h
 
-        self.verbal = verbal
+        self.verbose = verbose
         self.show = show
         if show:
             self.mViewer = MANO_Viewer.MANO_Viewer()
@@ -43,11 +48,20 @@ class DGRecv:
         self.data.append(data)
         self.times.append(timestamp)
         
-        if self.verbal:
+        if self.verbose:
             print timestamp
             print data
         if self.show:
             self.update_show(data)
+        # fps
+        if len(self.times) > 1:
+            dt = self.times[-1] - self.times[-2]
+            if dt < 1:
+                fps = ">1000"
+            else:
+                fps = str(1000.0 / dt)
+            sys.stdout.flush()
+            print("\r["+str(self.times[-1])+"]:"+fps+" fps")
 
     def save(self, filename = 'test'):
         np.save(filename, self.data)
@@ -88,31 +102,28 @@ class DGRecv:
 
     def run(self):
         client, addr = self.s.accept()
+        print("Accept Connection from "+ client.getsockname()[0])
         # client.settimeout(5)
         while True:
+            # client.settimeout()
             content = client.recv(256)
-            #content = list(content)
-            # content = content.encode('hex') # for python2
+            #content = list(content) # for python3
             if len(content) == 0:
                 break # client close
             else:
                 self.handle(content)
         client.close()
+        print("Connection Closed")
 
     def update_show(self, quats):        
         p = MANO_Viewer.styleMANO(quats)
         self.mViewer.view(p)
-        # fps
-        if len(self.times) > 1:
-            fps = 1000.0 / (self.times[-1] - self.times[-2])
-            sys.stdout.flush()
-            print("\r["+str(self.times[-1])+"]:"+str(fps)+" fps")
 
 if __name__ == "__main__":
     import time
     import MANO_Viewer
     import sys
-    dgr = DGRecv(port=10000, verbal=False, show=True)
+    dgr = DGRecv(port=9090, verbose=True, show=False)
     dgr.start()  
     try: 
         while True:

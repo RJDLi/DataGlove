@@ -6,18 +6,22 @@
  * - *need some buttons to set start/stop
  * - Communicate through Socket to Host
  *      - Sending data
- *      - Act
+ *      - *Act
  *          - Start/Stop
  *          - IMU settings
+ * Note:
+ * - Disable Serial print to speed up
+ * - Comment Test code -- search for "random data"
+ *   This part -- communication with slave mcu, is not tested
  */
 
 #include <WiFi.h>
 
-const char* ssid     = "BIGAI-OFFICE01";//"Pixel_7407";//"BIGAI-OFFICE03";
-const char* password = "BIGAI_2020";//"3.1415926535";//"BIGAI-2021";
+const char* ssid     = "Pixel_7407";//"BIGAI-OFFICE03";"BIGAI-OFFICE01";//
+const char* password = "3.1415926535";//"BIGAI-2021";"BIGAI_2020";//
 
-const char* server_addr = "192.168.8.115";
-const int server_port = 10000;
+const char* server_addr = "192.168.166.9";
+const int server_port = 9090;
 /*
  * Left:
  * Index
@@ -45,10 +49,12 @@ const int server_port = 10000;
 #include<SPI.h>
 
 #define HAND_LEFT
-#define PIN_SS_0 1
-#define PIN_SS_1 1
-#define PIN_SS_2 1
-#define PIN_SS_3 1
+#define PIN_SS_0 12
+#define PIN_SS_1 13
+#define PIN_SS_2 14
+#define PIN_SS_3 15
+// check pin settings in
+// ~/.arduino15/packages/esp32/hardware/esp32/1.0.6/variants/pico32
 const int PIN_SS[4] = {PIN_SS_0, PIN_SS_1, PIN_SS_2, PIN_SS_3};
 
 #define QUATERNION_QUATERNION
@@ -74,7 +80,7 @@ const uint8_t i2c2idx[16] = {
     12, 9, 13, 14,
     7, 8, 10, 11,
     4, 5, 6, 3,
-    1, 2, 9, 15
+    1, 2, 0, 15
 };
 union {
     float float_variable;
@@ -91,32 +97,50 @@ public:
         while (data_reading){}        
         data_writting = true;
         timestamp = millis();
+        
+        /*
         for(uint8_t i = 0; i<DATA_BYTES; i++){
             #ifdef QUATERNION_EULER
             orientation[i] = (((int16_t)buffer[i*2]) | (((int16_t)buffer[i*2+1]) << 8))/16.0;// 900 for rad
             #else
             orientation[i] = (int16_t)((((uint16_t)buffer[2*i+1]) << 8) | ((uint16_t)buffer[2*i]))/((double)(1<<12));
             #endif
+        }*/
+        for(uint8_t i = 0; i<DATA_BYTES*2; i++){
+          databytes[i] = buffer[i];
         }
+        
         data_updated = true;
         data_writting = false;
     }
     bool data_updated = false;
     void getOri(uint8_t* buffer){
+        /*
         for(int i = 0; i< DATA_BYTES; i++){
             float_byte_convert.float_variable = orientation[i];            
             memcpy(buffer+i*4, float_byte_convert.temp_array, 4);
         }
+        */
+        for(uint8_t i = 0; i<DATA_BYTES*2; i++){
+          buffer[i] = databytes[i];
+        }
+        
+        data_updated = false;
     }
 private:
     uint8_t idx;
     uint8_t channel;
-    float orientation[DATA_BYTES];
+    //float orientation[DATA_BYTES];
+    uint8_t databytes[DATA_BYTES*2];
     unsigned long timestamp;
 };
 Knuckle *knuckleList [16] = {};
 
 bool getQuat(uint8_t idx, uint8_t* buffer, unsigned long timeout = 8/*ms*/){
+    // random data for test
+    for(int i = 0; i<DATA_BYTES*2*4; i++) buffer[i] = 0x01;
+    return true;
+    
     uint8_t readbyte, sendbyte = 0xBF;
     digitalWrite(PIN_SS[idx],LOW);
 
@@ -135,14 +159,16 @@ bool getQuat(uint8_t idx, uint8_t* buffer, unsigned long timeout = 8/*ms*/){
     return true;
 }
 
-void task_getdata(void *pvParameters){
-    (void) pvParameters;
-    while(true){
+uint8_t wait2read[4] = {0,1,2,3};
+uint8_t wait2read_num = 4;
+bool prepared = false;
+void task_getdata(){//void *pvParameters){
+    //(void) pvParameters;
+    //Serial.println("Hello from task get");
+    //while(true){
         if(gSet_working){
             uint8_t readbuffer[DATA_BYTES*2*4];
-            uint8_t wait2read[4] = {0,1,2,3};
-            uint8_t wait2read_num = 4;
-            while(wait2read_num > 0){
+            if(wait2read_num > 0){
                 uint8_t i = wait2read[0];
                 if(getQuat(i, readbuffer)){
                     for(uint8_t j = 0; j<4; j++){
@@ -162,9 +188,18 @@ void task_getdata(void *pvParameters){
                     }
                     wait2read[wait2read_num] = i;
                 }
+            }else{      
+              prepared = true;
+              //Serial.println("Read 1 Frame");
+              for(uint8_t k=0; k<4; k++){
+                  wait2read[k] = k;
+              }  
+              wait2read_num = 4;
             }
         }
-    }
+    //}    
+    //vTaskDelete(NULL); // use this when this function is a task
+    return;
 }
 
 byte wlsend_buffer[512];
@@ -172,65 +207,65 @@ WiFiClient wificlient;
 /*
  * wireless sending buffer
  * Timestamp: 4byte
- * Data: 16*(3/4)*4 = 192/256
+ * Data: 16*(3/4)*2 = 96/128 (Euler/Quaternion)
+ * MsgLength = 100/132
  */
-void task_senddata(void *pvParameters){
-    (void) pvParameters;
-    while (true)
-    {
+void task_senddata(){//void *pvParameters){
+    //(void) pvParameters;
+    //Serial.println("Hello from task send");
+    //while (true)    {
+    if(wificlient.connected()){
         if(gSet_working){
-            bool prepared = true;
-            for(int i =0;i<16;i++){
-                if(!knuckleList[i]->data_updated){
-                    prepared = false;
-                    break;
-                }
-            }
             if(prepared){
+                //Serial.println("Send");
                 // format msg
                 data_reading = true;
                 //wlsend_buffer[0] = 0xAA;
                 uint8_t idx = 0;
                 unsigned long timestamp = millis();
                 for(int i = 0; i<4; i++){
-                    wlsend_buffer[idx] = (uint8_t)(timestamp >> 8);
+                    wlsend_buffer[idx] = (uint8_t)(timestamp >> (8*i));
                     idx ++;
                 }
                 for(int i = 0; i<16; i++){
                     knuckleList[i]->getOri(wlsend_buffer+idx);
-                    idx += (DATA_BYTES*4);
+                    idx += (DATA_BYTES*2);
                 }
+                prepared = false;
                 data_reading = false;
-                //wlsend_buffer[idx] = 0xFF;
-                //idx ++;
+                //wlsend_buffer[idx] = 0xFF; idx ++;
                 // send msg
                 wificlient.write(wlsend_buffer, idx);
+                //debug
+                /*for(int i=0; i<idx; i++){
+                  Serial.print(wlsend_buffer[i]);
+                  Serial.print(" ");
+                }
+                Serial.println("");*/
             }
         }
     }    
+    //vTaskDelete(NULL); // use this when this function is a task
+    return;
 };
 
 void setup(){
+    Serial.begin(115200);
+    Serial.println("!!!Begin");
     // SPI
     for(int i=0; i<4; i++){
       pinMode(PIN_SS[i], OUTPUT);
       digitalWrite(PIN_SS[i], HIGH);
     }
-    SPI.begin();
-    SPI.beginTransaction(SPISettings(2000000, MSBFIRST, SPI_MODE0));
+    SPI.begin();    
+    SPISettings setting1;
+    setting1._bitOrder = MSBFIRST;
+    setting1._clock = 2000000;
+    setting1._dataMode = SPI_MODE0;
+    SPI.beginTransaction(setting1);
+    //SPI.beginTransaction(SPISettings(2000000, MSBFIRST, SPI_MODE0));
+    SPI.endTransaction();
     //SPI.setClockDivider(SPI_CLOCK_DIV8); // same as 2000000 if 16Mhz osc
-    for(int i = 0;i<16; i++){
-        knuckleList[i] = new Knuckle(i);
-    }
-    // start read task
-    xTaskCreatePinnedToCore(
-    task_getdata
-    ,  "Get Data"   // A name just for humans
-    ,  1024  // This stack size can be checked & adjusted by reading the Stack Highwater
-    ,  NULL
-    ,  2  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
-    ,  NULL 
-    ,  0);    
 
     // WiFi Client
     WiFi.begin(ssid, password);
@@ -238,36 +273,60 @@ void setup(){
         delay(500);
         Serial.print(".");
     }
-
     Serial.println("");
     Serial.println("WiFi connected");
     Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
 
+    
+    for(int i = 0;i<16; i++){
+        knuckleList[i] = new Knuckle(i);
+    }
+    
+}
+void loop(){
+  /*
+    // start read task
+    xTaskCreatePinnedToCore(
+    task_getdata
+    ,  "Get Data"   // A name just for humans
+    ,  1024         // This stack size can be checked & adjusted by reading the Stack Highwater
+    ,  NULL
+    ,  2            // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    ,  NULL 
+    ,  0);          // Core
+
     // Sending task
     xTaskCreatePinnedToCore(
     task_senddata
-    ,  "Send Data"   // A name just for humans
-    ,  1024  // This stack size can be checked & adjusted by reading the Stack Highwater
+    ,  "Send Data"    // A name just for humans
+    ,  1024           // This stack size can be checked & adjusted by reading the Stack Highwater
     ,  NULL
-    ,  1  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    ,  3              // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
     ,  NULL 
-    ,  0);    
-}
-void loop(){
-    while(!wificlient.connected()){
+    ,  0);            // Core
+    */
+    task_getdata();
+    task_senddata();
+    
+    if(!wificlient.connected()){
         do{
             Serial.println("Unconnected...");
             delay(1000);
-        }while(!wificlient.connect(host, port));
-        Serial.println("Connected");
+        }while(false);
+        if(wificlient.connect(server_addr, server_port)){          
+          Serial.println("Connected");
+        }
+    }else{      
+        // Handling command
+        while(wificlient.available()) {
+            String line = wificlient.readStringUntil('\r');
+            Serial.print(line);
+            // TODO
+            // gSet_working
+    
+        }
     }
+    
 
-    // Handling command
-    while(wificlient.available()) {
-        String line = wificlient.readStringUntil('\r');
-        Serial.print(line);
-        // TODO
-
-    }
 }
